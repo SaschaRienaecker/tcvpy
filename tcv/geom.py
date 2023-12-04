@@ -7,7 +7,7 @@ import numpy as np
 
 import matplotlib.pyplot as plt
 from matplotlib.path import Path
-from matplotlib.patches import PathPatch
+from matplotlib.patches import PathPatch, Polygon
 from matplotlib.ticker import MaxNLocator
 
 import tcv
@@ -57,7 +57,12 @@ class StaticParameters(object):
             0.7500, 0.7033, 0, -0.7033, -0.7500, -0.7500, -0.5494, 0.0000
         ])
 
-        return cls({'vessel': vessel, 'tiles': tiles})
+        # copied from tcv_polview
+        pprotect_tiles = {}
+        pprotect_tiles['R'] = np.array([ 1.1360, 1.1360, 1.08927, 1.060, 1.060, 1.075, 1.136])
+        pprotect_tiles['Z'] = np.array([-0.5427,-0.5499,-0.60517,-0.461,-0.459,-0.384,-0.3489])
+
+        return cls({'vessel': vessel, 'tiles': tiles, 'pprotect_tiles' : pprotect_tiles})
 
     @staticmethod
     def _vessel_nodes():
@@ -148,6 +153,15 @@ class VesselDrawer(object):
 
         return tiles_patch
 
+    def _get_pprotect_tiles_patch(self):
+
+        # copied from tcv_polview
+        Rt = np.array([ 1.1360, 1.1360, 1.08927, 1.060, 1.060, 1.075, 1.136])
+        Zt = np.array([-0.5427,-0.5499,-0.60517,-0.461,-0.459,-0.384,-0.3489])
+        xy = np.array([Rt, Zt])
+        pa = Polygon(xy.T, facecolor=(0.8, 0.8, 0.8),edgecolor='black', closed=True, fill=True)
+        return pa
+
     def _transparent_inside_patch(self):
         if self._tiles_shown:
             vertices, codes = self._tiles()
@@ -163,7 +177,9 @@ class VesselDrawer(object):
             c.set_clip_path(vessel_in)
 
 
-def tcvview(shotnum, time, vessel=True, ports=False, tiles=True):
+def tcvview(shotnum, time, vessel=True, ports=False,
+            col='red', tiles=True, eq=None, vd=None, levels_core=None, levels_sol=None,
+            annot=True, **kwargs):
     """
     Popular way to display TCV.
 
@@ -187,41 +203,51 @@ def tcvview(shotnum, time, vessel=True, ports=False, tiles=True):
     """
     ax = plt.gca()
 
-    from . equilibrium import LiuqeEquilibrium
-
-    eq = LiuqeEquilibrium.fromshot(shotnum, time)
+    if eq is None:
+        from . equilibrium import LiuqeEquilibrium
+        eq = LiuqeEquilibrium.fromshot(shotnum, time)
 
     if ports:
         PortsDrawer().render()
 
     if vessel:
-        vd = VesselDrawer.from_static(shotnum)
+        if vd is None:
+            vd = VesselDrawer.from_static(shotnum)
         vd.render(ax, tiles)
 
     r, z, psi = eq.get_psi_contours()
     r0, z0 = eq.magnetic_axis
-    levels_core = np.linspace(0, 10, 101)
-    levels_sol = np.linspace(-10, 0, 101)
 
-    ax.contour(r, z, psi.T, levels=levels_core, colors='r')
-    ax.contour(r, z, psi.T, levels=levels_sol, colors='r', linestyles=':')
-    ax.plot([r0], [z0], 'r+')
+    if levels_core is None:
+        levels_core = np.linspace(0, 10, 101)
+    if levels_sol is None:
+        levels_sol  = np.linspace(-10, 0, 101)
+
+    if levels_core is not []:
+        ax.contour(r, z, psi.T, levels=levels_core, colors=col, **kwargs)
+    if levels_sol is not []:
+        ax.contour(r, z, psi.T, levels=levels_sol, colors=col, linestyles=':', **kwargs)
+    ax.plot([r0], [z0], '+', color=col)
     ax.set_aspect('equal')
 
     if vessel:
         vd.clip_collections_inside(ax)
-    _add_shot_time(eq.shot, eq.time, ax)
+
+    if annot:
+        _add_shot_time(eq.shot, eq.time, ax)
 
     ax.xaxis.set_major_locator(MaxNLocator(4))
 
     if plt.isinteractive():
         ax.figure.canvas.draw()
 
+    return eq
 
-def _add_shot_time(shot, time, ax):
+
+def _add_shot_time(shot, time, ax, color='black', vdispl=0):
     text = r'$\#%d\ %1.3f\ \mathrm{s}$' % (shot, time)
-    ax.text(1.0, 0, text, rotation=270, transform=ax.transAxes,
-            va='bottom', ha='left', size='small')
+    ax.text(1.0, vdispl, text, rotation=270, transform=ax.transAxes,
+            va='bottom', ha='left', size='small', color=color)
 
 
 def _add_plasma_parameters(connection, time, ax):
