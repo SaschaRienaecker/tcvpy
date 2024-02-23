@@ -1,3 +1,4 @@
+#%%
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -31,8 +32,8 @@ class Equilibrium(object):
         r, z, psi = self.get_psi_contours()
         levels = np.linspace(0, 1, 9)
 
-        ax.contour(r, z, psi, colors='black', levels=levels)
-        ax.contour(r, z, psi, colors='black', levels=[1], linewidths=2)
+        ax.contour(r, z, psi.T, colors='black', levels=levels)
+        ax.contour(r, z, psi.T, colors='black', levels=[1], linewidths=2)
         ax.plot([self.major_radius], [self.z_position], 'kx', ms=5)
         ax.set_aspect('equal')
         ax.figure.canvas.draw()
@@ -133,10 +134,17 @@ class LiuqeEquilibrium(Equilibrium):
     @classmethod
     def fromshot(cls, shotnum, time):
         with tcv.shot(shotnum) as conn:
-            psi = conn.tdi(r'\results::psi[*,*,$1]', time, dims=['r', 'z'])
-            psi_axis = conn.tdi(r'\results::psi_axis[$1]', time)
-            r0 = float(conn.tdi(r'\results::r_axis[$1]', time))
-            z0 = float(conn.tdi(r'\results::z_axis[$1]', time))
+            
+            if shotnum < 60000: # uses the old FORTRAN liuqe nodes
+                psi = conn.tdi(r'\results::psi[*,*,$1]', time, dims=['r', 'z'])
+                psi_axis = conn.tdi(r'\results::psi_axis[$1]', time)
+                r0 = float(conn.tdi(r'\results::r_axis[$1]', time))
+                z0 = float(conn.tdi(r'\results::z_axis[$1]', time))
+            else: # upgrade to the new liuqe.m (mandatory as of ~2024)
+                psi = conn.tdi(r'tcv_eq("psi","liuqe.m")[*,*,$1]', time, dims=['r', 'z'])
+                psi_axis = conn.tdi(r'tcv_eq("psi_axis", "liuqe.m")[$1]', time)
+                r0 = float(conn.tdi(r'tcv_eq("r_axis", "liuqe.m")[$1]', time))
+                z0 = float(conn.tdi(r'tcv_eq("z_axis", "liuqe.m")[$1]', time))
 
         data = {
             'r': psi.r,
@@ -158,3 +166,5 @@ class LiuqeEquilibrium(Equilibrium):
 if __name__ == '__main__':
     import doctest
     doctest.testmod()
+
+# %%
