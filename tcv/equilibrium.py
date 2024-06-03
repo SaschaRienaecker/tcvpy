@@ -146,10 +146,11 @@ class LiuqeEquilibrium(Equilibrium):
                 r0 = float(conn.tdi(r'tcv_eq("r_axis", "liuqe.m")[$1]', time))
                 z0 = float(conn.tdi(r'tcv_eq("z_axis", "liuqe.m")[$1]', time))
 
+        psi_LCFS = 0.0
         data = {
             'r': psi.r,
             'z': psi.z,
-            'psi': (psi / psi_axis).values,
+            'psi': ((psi - psi_axis) / (psi_LCFS - psi_axis)).values,
             'r0': r0,
             'z0': z0,
             'time': time,
