@@ -179,7 +179,7 @@ class VesselDrawer(object):
 
 def tcvview(shotnum, time, vessel=True, ports=False,
             col='red', tiles=True, eq=None, vd=None, levels_core=None, levels_sol=None,
-            annot=True, **kwargs):
+            annot=True, ax=None, **kwargs):
     """
     Popular way to display TCV.
 
@@ -201,7 +201,8 @@ def tcvview(shotnum, time, vessel=True, ports=False,
     >>> import tcv
     >>> tcv.tcvview(42660, 1)
     """
-    ax = plt.gca()
+    if ax is None:
+        ax = plt.gca()
 
     if eq is None:
         from . equilibrium import LiuqeEquilibrium
@@ -219,9 +220,9 @@ def tcvview(shotnum, time, vessel=True, ports=False,
     r0, z0 = eq.magnetic_axis
 
     if levels_core is None:
-        levels_core = np.linspace(0, 10, 101)
+        levels_core = np.linspace(0, 1, 11)
     if levels_sol is None:
-        levels_sol  = np.linspace(-10, 0, 101)
+        levels_sol  =  np.array([1.1,1.2,1.3,1.4])
 
     if levels_core is not []:
         ax.contour(r, z, psi.T, levels=levels_core, colors=col, **kwargs)
