@@ -17,8 +17,7 @@ Here's a quick example how to get the plasma current in the latest experiment:
         query: tcv_ip()
         shot: 0
 """
-from . mds import MDSConnection
-from . geom import tcvview
+from . geom import tcvview, VesselDrawer, PortsDrawer
 
 
 # Set default logging handler to avoid "No handler found" warnings.
@@ -46,6 +45,7 @@ def shot(shotnum=0, tree='tcv_shot', server='tcvdata.epfl.ch'):
     server : str, optional
         MDS database server
     """
+    from . mds import MDSConnection
 
     if isinstance(shotnum, MDSConnection):
         conn = shotnum

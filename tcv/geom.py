@@ -1,3 +1,4 @@
+#%%
 # pylint: disable=invalid-name, no-member
 """
 TCV geometry and vessel properties
@@ -9,8 +10,6 @@ import matplotlib.pyplot as plt
 from matplotlib.path import Path
 from matplotlib.patches import PathPatch, Polygon
 from matplotlib.ticker import MaxNLocator
-
-import tcv
 
 
 class StaticParameters(object):
@@ -42,28 +41,16 @@ class StaticParameters(object):
         """ Read the vessel's parameters from the static MDS nodes """
 
         vessel = {}
+        import tcv
         with tcv.shot(shotnum) as conn:
             for key, query in cls._vessel_nodes().items():
                 vessel[key] = conn.tdi(query).values
 
-        tiles = {}
-        tiles['R'] = np.array([
-            1.1360, 1.1360, 1.1120, 1.0880, 1.0640, 1.0399, 1.0159, 0.9919,
-            0.9679, 0.6707, 0.6240, 0.6240, 0.6240, 0.6724, 0.9679, 1.1360,
-            1.1360
-        ])
-        tiles['Z'] = np.array([
-            0, 0.5494, 0.5781, 0.6067, 0.6354, 0.6640, 0.6927, 0.7213, 0.7500,
-            0.7500, 0.7033, 0, -0.7033, -0.7500, -0.7500, -0.5494, 0.0000
-        ])
-
-        # copied from tcv_polview
-        pprotect_tiles = {}
-        pprotect_tiles['R'] = np.array([ 1.1360, 1.1360, 1.08927, 1.060, 1.060, 1.075, 1.136])
-        pprotect_tiles['Z'] = np.array([-0.5427,-0.5499,-0.60517,-0.461,-0.459,-0.384,-0.3489])
+        tiles = cls._get_tiles()
+        pprotect_tiles = cls._get_pprotect_tiles()
 
         return cls({'vessel': vessel, 'tiles': tiles, 'pprotect_tiles' : pprotect_tiles})
-
+    
     @staticmethod
     def _vessel_nodes():
         """ Return the static MDS nodes containing the vessel parameters """
@@ -75,6 +62,56 @@ class StaticParameters(object):
             'Z_out': 'static("z_v:out")'}
         return nodes
 
+
+    @staticmethod
+    def _get_tiles():
+        tiles = {}
+        tiles['R'] = np.array([
+            1.1360, 1.1360, 1.1120, 1.0880, 1.0640, 1.0399, 1.0159, 0.9919,
+            0.9679, 0.6707, 0.6240, 0.6240, 0.6240, 0.6724, 0.9679, 1.1360,
+            1.1360
+        ])
+        tiles['Z'] = np.array([
+            0, 0.5494, 0.5781, 0.6067, 0.6354, 0.6640, 0.6927, 0.7213, 0.7500,
+            0.7500, 0.7033, 0, -0.7033, -0.7500, -0.7500, -0.5494, 0.0000
+        ])
+
+        return tiles 
+
+    def _get_pprotect_tiles():
+        # copied from tcv_polview
+        pprotect_tiles = {}
+        pprotect_tiles['R'] = np.array([ 1.1360, 1.1360, 1.08927, 1.060, 1.060, 1.075, 1.136])
+        pprotect_tiles['Z'] = np.array([-0.5427,-0.5499,-0.60517,-0.461,-0.459,-0.384,-0.3489])
+        return pprotect_tiles
+
+    @classmethod
+    def from_file(cls, shotnum):
+        """ Read the vessel's parameters from a file """
+
+        vessel = {}
+
+        from matlabtools import Struct
+        vessel = Struct.from_mat('/home/rienacker/data/vessel.mat', mat_key='output').vessel
+
+        # tiles = cls._get_tiles()
+        pprotect_tiles = cls._get_pprotect_tiles()
+
+        tiles = Struct.from_mat(f'/home/rienacker/data/tmp/vessel_{shotnum}.mat')
+        r_tv = tiles.r_tv
+        z_tv = tiles.z_tv
+        # close the path:
+        # r_tv = np.append(r_tv, r_tv[0])
+        # z_tv = np.append(z_tv, z_tv[0])
+        # print(r_tv, z_tv)
+
+        r_tv = r_tv[::-1]
+        z_tv = z_tv[::-1]
+
+        tiles['R'] = r_tv
+        tiles['Z'] = z_tv
+
+        return cls({'vessel': vessel, 'tiles': tiles, 'pprotect_tiles' : pprotect_tiles})
 
 class VesselDrawer(object):
     def __init__(self, coordinates):
@@ -95,12 +132,19 @@ class VesselDrawer(object):
         coords = {'vessel': static.get_coordinates('vessel'),
                   'tiles': static.get_coordinates('tiles')}
         return cls(coords)
+    
+    @classmethod
+    def from_file(cls, shotnum=0):
+        static = StaticParameters.from_file(shotnum)
+        coords = {'vessel': static.get_coordinates('vessel'),
+                  'tiles': static.get_coordinates('tiles')}
+        return cls(coords)
 
-    def render(self, ax=None, tiles=True):
+    def render(self, ax=None, tiles=True, vessel_kwargs=None, tiles_kwargs=None):
         ax = ax or plt.gca()
-        ax.add_patch(self._get_vessel_patch())
+        ax.add_patch(self._get_vessel_patch(**(vessel_kwargs or {})))
         if tiles and self.has_tiles_coordinates():
-            ax.add_patch(self._get_tiles_patch())
+            ax.add_patch(self._get_tiles_patch(**(tiles_kwargs or {})))
             self._tiles_shown = True
 
     def get_coordinates(self, key):
@@ -136,31 +180,26 @@ class VesselDrawer(object):
         codes = [Path.MOVETO] + (len(vertices) - 1) * [Path.LINETO]
         return vertices, codes
 
-    def _get_vessel_patch(self):
+    def _get_vessel_patch(self, **patch_kwargs):
         vertices_in, codes_in = self._inside()
         vertices_out, codes_out = self._outside()
         vessel_path = Path(vertices_in + vertices_out, codes_in + codes_out)
-        vessel_patch = PathPatch(vessel_path, facecolor=(0.6, 0.6, 0.6),
-                                 edgecolor='black')
+        patch_kwargs_default = dict(facecolor=(0.6, 0.6, 0.6), edgecolor='black')
+        patch_kwargs_default.update(patch_kwargs)
+        vessel_patch = PathPatch(vessel_path, **patch_kwargs_default)
         return vessel_patch
 
-    def _get_tiles_patch(self):
+    def _get_tiles_patch(self, **patch_kwargs):
         vertices_in, codes_in = self._tiles()
         vertices_out, codes_out = self._inside()
         tiles_path = Path(vertices_in + vertices_out, codes_in + codes_out)
-        tiles_patch = PathPatch(tiles_path, facecolor=(0.75, 0.75, 0.75),
-                                edgecolor='black')
+        patch_kwargs_default = dict(facecolor=(0.75, 0.75, 0.75),
+                                    edgecolor='black')
+        patch_kwargs_default.update(patch_kwargs)
+        tiles_patch = PathPatch(tiles_path, **patch_kwargs_default)
 
         return tiles_patch
 
-    def _get_pprotect_tiles_patch(self):
-
-        # copied from tcv_polview
-        Rt = np.array([ 1.1360, 1.1360, 1.08927, 1.060, 1.060, 1.075, 1.136])
-        Zt = np.array([-0.5427,-0.5499,-0.60517,-0.461,-0.459,-0.384,-0.3489])
-        xy = np.array([Rt, Zt])
-        pa = Polygon(xy.T, facecolor=(0.8, 0.8, 0.8),edgecolor='black', closed=True, fill=True)
-        return pa
 
     def _transparent_inside_patch(self):
         if self._tiles_shown:
@@ -369,3 +408,18 @@ class PortsDrawer(object):
     def render(self, ax=None):
         ax = ax or plt.gca()
         ax.add_patch(self.get_patch())
+
+# %%
+if __name__ == '__main__':
+
+    fig, ax = plt.subplots()
+    vd = VesselDrawer.from_file(shotnum=86593)
+    vd.render(ax, tiles=True, 
+              vessel_kwargs=dict(facecolor=(.7, .7, .8), edgecolor='black', lw=0.5),
+              tiles_kwargs=dict(facecolor=(.9, .9, 1.), edgecolor='black', lw=0.7),
+              )
+    vd.clip_collections_inside(ax)
+
+    # PortsDrawer().render(ax=ax)
+
+# %%
