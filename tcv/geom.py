@@ -97,7 +97,7 @@ class StaticParameters(object):
         # tiles = cls._get_tiles()
         pprotect_tiles = cls._get_pprotect_tiles()
 
-        tiles = Struct.from_mat(f'/home/rienacker/data/tmp/vessel_{shotnum}.mat')
+        tiles = Struct.from_mat(f'/home/rienacker/data/tmp/tiles_{shotnum}.mat')
         r_tv = tiles.r_tv
         z_tv = tiles.z_tv
         # close the path:
@@ -134,11 +134,24 @@ class VesselDrawer(object):
         return cls(coords)
     
     @classmethod
-    def from_file(cls, shotnum=0):
+    def from_file(cls, shotnum=0, baffle_config=None):
+
         static = StaticParameters.from_file(shotnum)
         coords = {'vessel': static.get_coordinates('vessel'),
                   'tiles': static.get_coordinates('tiles')}
         return cls(coords)
+
+    @classmethod
+    def from_baffle_config(cls, config='unbaffled'):
+
+        baffles_to_shot_dict = {
+            'unbaffled': 86593,
+            'siso': 79345,
+            'tblld': 92099,
+        }
+        shot = baffles_to_shot_dict[config]
+        return cls.from_file(shotnum=shot)
+                
 
     def render(self, ax=None, tiles=True, vessel_kwargs=None, tiles_kwargs=None):
         ax = ax or plt.gca()
@@ -413,7 +426,8 @@ class PortsDrawer(object):
 if __name__ == '__main__':
 
     fig, ax = plt.subplots()
-    vd = VesselDrawer.from_file(shotnum=86593)
+    vd = VesselDrawer.from_baffle_config(config='tblld')
+    # vd = VesselDrawer.from_baffle_config(config='unbaffled')
     vd.render(ax, tiles=True, 
               vessel_kwargs=dict(facecolor=(.7, .7, .8), edgecolor='black', lw=0.5),
               tiles_kwargs=dict(facecolor=(.9, .9, 1.), edgecolor='black', lw=0.7),
@@ -421,5 +435,8 @@ if __name__ == '__main__':
     vd.clip_collections_inside(ax)
 
     # PortsDrawer().render(ax=ax)
+    ax.set_xlim(0.5,1.5)
+    ax.set_ylim(-0.9,0.9)
+    ax.set_aspect('equal')
 
 # %%
